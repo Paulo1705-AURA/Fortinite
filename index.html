@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ilha da Batalha</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; color: #fff; user-select: none; }
+  canvas { display: block; }
+  #cruz { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); pointer-events: none; }
+  #cruz::before, #cruz::after { content: ""; position: absolute; background: #fff; mix-blend-mode: difference; }
+  #cruz::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #cruz::after { top: 10px; left: 0; height: 2px; width: 22px; }
+  #hit { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(45deg); width: 26px; height: 26px; border: 3px solid #fff; opacity: 0; pointer-events: none; transition: opacity .15s; }
+  #hit.cab { border-color: #ff3b3b; }
+  #mini { position: fixed; top: 12px; right: 12px; width: 150px; height: 150px; border-radius: 10px; background: rgba(0,0,0,.45); }
+  #placar { position: fixed; top: 170px; right: 12px; background: rgba(0,0,0,.5); border-radius: 8px; padding: 6px 12px; font-weight: 700; text-align: right; font-size: 14px; line-height: 1.5; }
+  #tempestade { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(80,20,140,.7); border-radius: 999px; padding: 6px 18px; font-weight: 700; font-size: 14px; }
+  #feed { position: fixed; top: 12px; left: 12px; font-size: 13px; line-height: 1.6; }
+  #feed div { background: rgba(0,0,0,.55); padding: 2px 10px; border-radius: 6px; margin-bottom: 3px; width: fit-content; }
+  #aviso { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 8px 20px; border-radius: 999px; font-weight: 700; opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap; }
+  #planar { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); font-weight: 700; font-size: 18px; text-shadow: 1px 1px 3px #000; display: none; text-align: center; }
+
+  #baixo { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 94vw; }
+  .barra { height: 14px; background: rgba(0,0,0,.55); border-radius: 7px; overflow: hidden; margin-bottom: 4px; position: relative; }
+  .barra div { height: 100%; transition: width .12s; }
+  #bEsc div { background: #3fa9ff; }
+  #bVida div { background: #5ee06a; }
+  #slots { display: flex; gap: 6px; margin-top: 8px; justify-content: center; }
+  .slot { width: 72px; height: 50px; background: rgba(0,0,0,.55); border: 3px solid #555; border-radius: 6px; position: relative; text-align: center; font-size: 11px; padding-top: 14px; box-sizing: border-box; }
+  .slot.sel { border-color: #fff; transform: translateY(-4px); }
+  .slot .k { position: absolute; top: 1px; left: 5px; font-size: 11px; opacity: .8; }
+  #mats { position: fixed; bottom: 14px; right: 14px; background: rgba(0,0,0,.55); padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+  #dano { position: fixed; inset: 0; background: radial-gradient(transparent 45%, rgba(220,0,0,.7)); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  #tormentaTela { position: fixed; inset: 0; background: rgba(110,30,190,.28); opacity: 0; pointer-events: none; transition: opacity .4s; }
+
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,.65); text-align: center; gap: 10px; }
+  #menu { cursor: pointer; }
+  .overlay h1 { font-size: 2.6rem; margin: 0; }
+  .overlay p { color: #dfe6f0; line-height: 1.7; margin: 4px 0; max-width: 640px; }
+  #fim { display: none; background: rgba(0,0,0,.82); }
+  kbd { background: #333; border-radius: 4px; padding: 2px 7px; border: 1px solid #777; }
+  button { background: #ff7a1a; color: #fff; border: none; padding: 10px 22px; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="cruz"></div><div id="hit"></div>
+<canvas id="mini" width="150" height="150"></canvas>
+<div id="placar"></div>
+<div id="tempestade"></div>
+<div id="feed"></div>
+<div id="aviso"></div>
+<div id="planar">🪂 Planando! <small>WASD direciona · Espaço mergulha</small></div>
+<div id="baixo">
+  <div class="barra" id="bEsc"><div style="width:0%"></div></div>
+  <div class="barra" id="bVida"><div style="width:100%"></div></div>
+  <div id="slots"></div>
+</div>
+<div id="mats"></div>
+<div id="dano"></div><div id="tormentaTela"></div>
+
+<div id="menu" class="overlay">
+  <h1>🏝️ Ilha da Batalha</h1>
+  <p><b>20 jogadores, 1 vencedor.</b> Salte de paraquedas, pegue armas, construa defesas e fique vivo até o fim — a tempestade vai fechando o mapa!</p>
+  <p>Clique para jogar</p>
+  <p>
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> andar · <kbd>Espaço</kbd> pular/mergulhar · <kbd>Shift</kbd> correr<br>
+    <b>Clique esquerdo</b> atira / bate com a picareta · <b>Clique direito</b> mirar<br>
+    <kbd>1</kbd> picareta (coleta madeira de árvores e caixas) · <kbd>2</kbd>–<kbd>5</kbd> armas<br>
+    <kbd>Q</kbd> parede · <kbd>E</kbd> piso (olhe para baixo para pôr sob os pés) · <kbd>R</kbd> rampa · <kbd>G</kbd> trocar arma do chão
+  </p>
+</div>
+<div id="fim" class="overlay">
+  <h1 id="fimTit"></h1>
+  <p id="fimTxt"></p>
+  <button onclick="location.reload()">Jogar de novo</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const angDif = (a, b) => { let d = a - b; while (d > Math.PI) d -= 6.2832; while (d < -Math.PI) d += 6.2832; return d; };
+
+// =====================================================
+// CENA
+// =====================================================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+const cena = new THREE.Scene();
+cena.background = new THREE.Color(0x8fd0f5);
+cena.fog = new THREE.Fog(0x8fd0f5, 90, 240);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 400);
+camera.rotation.order = 'YXZ';
+cena.add(new THREE.AmbientLight(0xffffff, 0.78));
+const sol = new THREE.DirectionalLight(0xffffff, 0.65);
+sol.position.set(60, 100, 40);
+cena.add(sol);
+
+const matCache = {};
+const mat = c => matCache[c] || (matCache[c] = new THREE.MeshLambertMaterial({ color: c }));
+
+// =====================================================
+// TERRENO E CASAS
+// =====================================================
+function baseAlt(x, z) {
+  let h = 2.2 * Math.sin(x * .05) * Math.cos(z * .045) + 1.6 * Math.sin((x + z) * .03) + 1.2;
+  const d = Math.hypot(x, z);
+  if (d > 64) h -= (d - 64) * .6;
+  return h;
+}
+const casas = [];
+function terreno(x, z) {
+  let h = baseAlt(x, z);
+  for (const c of casas) {
+    const m = Math.max(Math.abs(x - c.cx), Math.abs(z - c.cz));
+    if (m < 5.5) return c.h0;
+    if (m < 10) h = lerp(h, c.h0, (10 - m) / 4.5);
+  }
+  return h;
+}
+for (let t = 0; t < 400 && casas.length < 16; t++) {
+  const a = rnd(0, 6.283), r = rnd(6, 54);
+  const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+  if (casas.some(c => Math.hypot(c.cx - cx, c.cz - cz) < 20)) continue;
+  const h0 = Math.round(baseAlt(cx, cz) * 2) / 2;
+  if (h0 < 0.6) continue;
+  casas.push({ cx, cz, h0, lado: Math.floor(rnd(0, 4)) });
+}
+const tg = new THREE.PlaneGeometry(190, 190, 95, 95);
+tg.rotateX(-Math.PI / 2);
+{
+  const pos = tg.attributes.position, col = [];
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), y = terreno(x, z);
+    pos.setY(i, y);
+    if (y < .45) c.setHex(0xdcc98a);
+    else c.setHSL(.27, .5, .32 + .06 * Math.sin(x * .3) * Math.cos(z * .3) + (y > 3 ? .05 : 0));
+    col.push(c.r, c.g, c.b);
+  }
+  tg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  tg.computeVertexNormals();
+  cena.add(new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true })));
+}
+{
+  const ag = new THREE.PlaneGeometry(900, 900); ag.rotateX(-Math.PI / 2);
+  const agua = new THREE.Mesh(ag, new THREE.MeshLambertMaterial({ color: 0x2f80c8, transparent: true, opacity: .92 }));
+  agua.position.y = -1.2; cena.add(agua);
+}
+
+// =====================================================
+// COLISORES
+// =====================================================
+const caixas = [];
+const chavesPeca = new Set();
+function caja(cx, y0, cz, w, h, d, tipo, cor, hp) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(cor));
+  mesh.position.set(cx, y0 + h / 2, cz);
+  cena.add(mesh);
+  const b = { minx: cx - w / 2, maxx: cx + w / 2, miny: y0, maxy: y0 + h, minz: cz - d / 2, maxz: cz + d / 2, tipo, hp, mesh, extra: [] };
+  caixas.push(b);
+  return b;
+}
+function quitar(b) {
+  cena.remove(b.mesh);
+  b.extra.forEach(m => cena.remove(m));
+  const i = caixas.indexOf(b);
+  if (i >= 0) caixas.splice(i, 1);
+  if (b.chave) chavesPeca.delete(b.chave);
+}
+function danarCaja(b, d) {
+  if (b.tipo === 'estr') return;
+  b.hp -= d;
+  if (b.hp <= 0) quitar(b);
+}
+
+const L = 8, T = .4, H = 3;
+function construirCasa(c) {
+  const { cx, cz, h0, lado } = c;
+  caja(cx, h0 - .3, cz, L, .3, L, 'estr', 0x8d7a5c, Infinity);
+  for (let s = 0; s < 4; s++) {
+    const horiz = s < 2, sg = (s % 2 === 0) ? -1 : 1;
+    const px = horiz ? cx : cx + sg * (L / 2 - T / 2);
+    const pz = horiz ? cz + sg * (L / 2 - T / 2) : cz;
+    const cor = 0xd9c7a3;
+    if (s === lado) {
+      const seg = (L - 2.2) / 2;
+      if (horiz) {
+        caja(cx - (1.1 + seg / 2), h0, pz, seg, H, T, 'estr', cor, Infinity);
+        caja(cx + (1.1 + seg / 2), h0, pz, seg, H, T, 'estr', cor, Infinity);
+        caja(cx, h0 + 2.3, pz, 2.2, H - 2.3, T, 'estr', cor, Infinity);
+      } else {
+        caja(px, h0, cz - (1.1 + seg / 2), T, H, seg, 'estr', cor, Infinity);
+        caja(px, h0, cz + (1.1 + seg / 2), T, H, seg, 'estr', cor, Infinity);
+        caja(px, h0 + 2.3, cz, T, H - 2.3, 2.2, 'estr', cor, Infinity);
+      }
+    } else caja(px, h0, pz, horiz ? L : T, H, horiz ? T : L, 'estr', cor, Infinity);
+  }
+  caja(cx, h0 + H, cz, L + .6, .4, L + .6, 'estr', 0xb5523b, Infinity);
+  for (let i = 0; i < 2; i++) caja(cx + rnd(-2.6, 2.6), h0, cz + rnd(-2.6, 2.6), 1.1, 1.1, 1.1, 'caixa', 0xb98a4e, 60);
+}
+casas.forEach(construirCasa);
+// árvores
+for (let i = 0, n = 0; i < 400 && n < 85; i++) {
+  const a = rnd(0, 6.283), r = rnd(4, 62);
+  const x = Math.cos(a) * r, z = Math.sin(a) * r, y = terreno(x, z);
+  if (y < .5 || casas.some(c => Math.max(Math.abs(x - c.cx), Math.abs(z - c.cz)) < 11)) continue;
+  const b = caja(x, y, z, .7, 4, .7, 'arbol', 0x6b4a2b, 100);
+  const f = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3, 3.2), mat(0x2e7d32));
+  f.position.set(x, y + 5, z); cena.add(f); b.extra.push(f);
+  n++;
+}
+// caixas soltas
+for (let i = 0, n = 0; i < 200 && n < 25; i++) {
+  const a = rnd(0, 6.283), r = rnd(4, 60);
+  const x = Math.cos(a) * r, z = Math.sin(a) * r, y = terreno(x, z);
+  if (y < .5 || casas.some(c => Math.max(Math.abs(x - c.cx), Math.abs(z - c.cz)) < 11)) continue;
+  caja(x, y, z, 1.1, 1.1, 1.1, 'caixa', 0xb98a4e, 60); n++;
+}
+
+// =====================================================
+// FÍSICA
+// =====================================================
+const R = .35;
+function sueloEm(x, z, y) {
+  let s = terreno(x, z);
+  for (const b of caixas)
+    if (x + R > b.minx && x - R < b.maxx && z + R > b.minz && z - R < b.maxz && b.maxy <= y + .9 && b.maxy > s) s = b.maxy;
+  return s;
+}
+function bloq(x, y, z) {
+  for (const b of caixas)
+    if (x + R > b.minx && x - R < b.maxx && z + R > b.minz && z - R < b.maxz && y < b.maxy - .85 && y + 1.8 > b.miny) return true;
+  return false;
+}
+function mover(e, mx, mz, dt, salto) {
+  if (e.glide) {
+    e.x += mx * dt; e.z += mz * dt;
+    const rr = Math.hypot(e.x, e.z); if (rr > 72) { e.x *= 72 / rr; e.z *= 72 / rr; }
+    e.vy = e.pique ? -16 : -7;
+    e.y += e.vy * dt;
+    const s = sueloEm(e.x, e.z, e.y);
+    if (e.y <= s) { e.y = s; e.vy = 0; e.glide = false; }
+    return;
+  }
+  const nx = e.x + mx * dt;
+  if (!bloq(nx, e.y, e.z)) e.x = nx;
+  const nz = e.z + mz * dt;
+  if (!bloq(e.x, e.y, nz)) e.z = nz;
+  const rr = Math.hypot(e.x, e.z); if (rr > 72) { e.x *= 72 / rr; e.z *= 72 / rr; }
+  e.vy -= 24 * dt;
+  let ny = e.y + e.vy * dt;
+  const s = sueloEm(e.x, e.z, e.y);
+  e.chao = false;
+  if (e.vy > 0) {
+    for (const b of caixas)
+      if (e.x + R > b.minx && e.x - R < b.maxx && e.z + R > b.minz && e.z - R < b.maxz && e.y + 1.8 <= b.miny + .05 && ny + 1.8 > b.miny) {
+        ny = b.miny - 1.8; e.vy = 0; break;
+      }
+  }
+  if (ny <= s && e.vy <= 0) { ny = s; e.vy = 0; e.chao = true; }
+  e.y = ny;
+  if (e.chao && salto) { e.vy = 8.5; e.chao = false; }
+}
+
+// raios
+function rayBox(ox, oy, oz, dx, dy, dz, b) {
+  let tmin = 0, tmax = 1e9;
+  const ax = [[ox, dx, b.minx, b.maxx], [oy, dy, b.miny, b.maxy], [oz, dz, b.minz, b.maxz]];
+  for (const [o, d, lo, hi] of ax) {
+    if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) return Infinity; }
+    else {
+      let t1 = (lo - o) / d, t2 = (hi - o) / d;
+      if (t1 > t2) { const k = t1; t1 = t2; t2 = k; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return Infinity;
+    }
+  }
+  return tmin;
+}
+function rayCajas(ox, oy, oz, dx, dy, dz, max) {
+  let best = max, hit = null;
+  for (const b of caixas) { const t = rayBox(ox, oy, oz, dx, dy, dz, b); if (t < best) { best = t; hit = b; } }
+  return { t: best, b: hit };
+}
+function raySphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, r) {
+  const lx = cx - ox, ly = cy - oy, lz = cz - oz;
+  const tca = lx * dx + ly * dy + lz * dz;
+  if (tca < 0) return Infinity;
+  const d2 = lx * lx + ly * ly + lz * lz - tca * tca;
+  if (d2 > r * r) return Infinity;
+  return tca - Math.sqrt(r * r - d2);
+}
+function rayEnt(ox, oy, oz, dx, dy, dz, e) {
+  const th = raySphere(ox, oy, oz, dx, dy, dz, e.x, e.y + 1.6, e.z, .28);
+  const tb = Math.min(
+    raySphere(ox, oy, oz, dx, dy, dz, e.x, e.y + .55, e.z, .42),
+    raySphere(ox, oy, oz, dx, dy, dz, e.x, e.y + 1.1, e.z, .42));
+  return th < tb ? { t: th, head: true } : { t: tb, head: false };
+}
+
+// =====================================================
+// ARMAS
+// =====================================================
+const ARMAS = {
+  pistola:  { nome: 'Pistola',  dano: 18, cd: .35, spread: .012, alcance: 100, pellets: 1, cor: 0xb0b6bd, ideal: 14, nota: 1 },
+  rifle:    { nome: 'Rifle',    dano: 22, cd: .13, spread: .02,  alcance: 120, pellets: 1, cor: 0x4caf50, ideal: 18, nota: 3 },
+  escopeta: { nome: 'Escopeta', dano: 11, cd: .85, spread: .07,  alcance: 40,  pellets: 8, cor: 0xff9800, ideal: 7,  nota: 2.5 },
+  sniper:   { nome: 'Sniper',   dano: 75, cd: 1.5, spread: .001, alcance: 220, pellets: 1, cor: 0xab47bc, ideal: 34, nota: 2 }
+};
+const NOMES_ARMAS = Object.keys(ARMAS);
+const tracers = [];
+function tracer(x1, y1, z1, x2, y2, z2) {
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1, y1, z1), new THREE.Vector3(x2, y2, z2)]);
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xffe27a }));
+  cena.add(l); tracers.push({ l, v: .07 });
+}
+function disparar(e, nome, ox, oy, oz, dx, dy, dz, mult) {
+  const A = ARMAS[nome];
+  for (let i = 0; i < A.pellets; i++) {
+    let ax = dx + rnd(-1, 1) * A.spread * mult, ay = dy + rnd(-1, 1) * A.spread * mult, az = dz + rnd(-1, 1) * A.spread * mult;
+    const n = Math.hypot(ax, ay, az); ax /= n; ay /= n; az /= n;
+    const rc = rayCajas(ox, oy, oz, ax, ay, az, A.alcance);
+    let tb = rc.t, vict = null, cab = false;
+    for (const o of ents) {
+      if (o === e || !o.alive || o.glide) continue;
+      const r = rayEnt(ox, oy, oz, ax, ay, az, o);
+      if (r.t < tb) { tb = r.t; vict = o; cab = r.head; }
+    }
+    if (vict) {
+      const d = A.dano * (cab ? 1.8 : 1) * (e.esBot ? .6 : 1);
+      danar(vict, d, e);
+      if (e === eu) marcador(cab);
+    } else if (rc.b) danarCaja(rc.b, A.dano);
+    const mx = e.x - Math.sin(e.yaw) * .6, mz = e.z - Math.cos(e.yaw) * .6;
+    tracer(mx, e.y + 1.25, mz, ox + ax * tb, oy + ay * tb, oz + az * tb);
+  }
+}
+
+// =====================================================
+// ENTIDADES
+// =====================================================
+const ents = [];
+function modelo(cor) {
+  const g = new THREE.Group();
+  const corpo = new THREE.Mesh(new THREE.BoxGeometry(.7, .9, .4), mat(cor)); corpo.position.y = .95; g.add(corpo);
+  const pernas = new THREE.Mesh(new THREE.BoxGeometry(.6, .5, .35), mat(0x37474f)); pernas.position.y = .25; g.add(pernas);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(.4, .4, .4), mat(0xf1c9a0)); cab.position.y = 1.65; g.add(cab);
+  const arma = new THREE.Mesh(new THREE.BoxGeometry(.12, .14, .65), mat(0x222222)); arma.position.set(.38, 1.0, -.4); g.add(arma);
+  return g;
+}
+function crearEnt(nome, esBot, cor) {
+  const e = { nome, esBot, x: 0, y: 55, z: 0, vy: 0, yaw: rnd(0, 6.28), pitch: 0, hp: 100, escudo: 0, alive: true, glide: true, pique: false, chao: false,
+    slots: [null, null, null, null], cur: 0, arma: null, madeira: 100, cd: 0, elims: 0,
+    mesh: modelo(cor), tDec: rnd(0, .3), strafeT: 0, strafeDir: 1, reacao: 0, dest: { x: 0, z: 0 }, inimigo: null, fuga: false,
+    desvio: 0, desvioDir: 1, ultX: 0, ultZ: 0, tStuck: 0, tBuild: 0 };
+  const a = rnd(0, 6.283), r = rnd(0, 52);
+  e.x = Math.cos(a) * r; e.z = Math.sin(a) * r;
+  cena.add(e.mesh);
+  ents.push(e);
+  return e;
+}
+const eu = crearEnt('Você', false, 0xff7043);
+const NOMES = ['Aurora', 'Bruno', 'Caio', 'Duda', 'Enzo', 'Fabi', 'Gael', 'Helena', 'Iago', 'Joana', 'Kauã', 'Lia', 'Murilo', 'Nina', 'Otávio', 'Paula', 'Rafa', 'Sofia', 'Tiago'];
+NOMES.forEach(n => {
+  const b = crearEnt(n, true, new THREE.Color().setHSL(Math.random(), .6, .5).getHex());
+  const c = Math.random() < .7 ? casas[Math.floor(Math.random() * casas.length)] : null;
+  b.dest = c ? { x: c.cx + rnd(-2, 2), z: c.cz + rnd(-2, 2) } : { x: rnd(-50, 50), z: rnd(-50, 50) };
+  b.yaw = Math.atan2(-(b.dest.x - b.x), -(b.dest.z - b.z));
+});
+const contarVivos = () => ents.filter(e => e.alive).length;
+
+// =====================================================
+// ITENS
+// =====================================================
+const itens = [];
+const COR_ITEM = { escudo: 0x2196f3, cura: 0xf44336, madera: 0x8d6e63 };
+function crearItem(tipo, x, y, z, arma) {
+  const cor = tipo === 'arma' ? ARMAS[arma].cor : COR_ITEM[tipo];
+  const g = new THREE.Group();
+  const caixa = new THREE.Mesh(tipo === 'arma' ? new THREE.BoxGeometry(.7, .22, .22) : new THREE.BoxGeometry(.35, .35, .35), new THREE.MeshLambertMaterial({ color: cor, emissive: cor, emissiveIntensity: .35 }));
+  caixa.position.y = .8; g.add(caixa);
+  const feixe = new THREE.Mesh(new THREE.BoxGeometry(.12, 2.2, .12), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: .35 }));
+  feixe.position.y = 1.1; g.add(feixe);
+  g.position.set(x, y, z);
+  cena.add(g);
+  const it = { tipo, arma, x, y, z, g, caixa, vivo: true, fase: rnd(0, 6) };
+  itens.push(it);
+  return it;
+}
+function tirarItem(it) { it.vivo = false; cena.remove(it.g); itens.splice(itens.indexOf(it), 1); }
+casas.forEach(c => {
+  for (let i = 0; i < 2; i++) {
+    const x = c.cx + rnd(-2.5, 2.5), z = c.cz + rnd(-2.5, 2.5);
+    sortear(x, c.h0, z);
+  }
+});
+for (let i = 0, n = 0; i < 300 && n < 32; i++) {
+  const a = rnd(0, 6.283), r = rnd(3, 62);
+  const x = Math.cos(a) * r, z = Math.sin(a) * r, y = terreno(x, z);
+  if (y < .5) continue;
+  sortear(x, y, z); n++;
+}
+function sortear(x, y, z) {
+  const r = Math.random();
+  if (r < .5) crearItem('arma', x, y, z, NOMES_ARMAS[Math.floor(Math.random() * 4)]);
+  else if (r < .72) crearItem('escudo', x, y, z);
+  else if (r < .9) crearItem('cura', x, y, z);
+  else crearItem('madera', x, y, z);
+}
+
+// =====================================================
+// DANO, MORTE, TEMPESTADE
+// =====================================================
+let fimJogo = false, ativoJogo = false;
+function danar(v, d, a) {
+  if (!v.alive) return;
+  if (v.escudo > 0) { const s = Math.min(v.escudo, d); v.escudo -= s; d -= s; }
+  v.hp -= d;
+  if (v === eu) { flash(); hud(); }
+  if (v.hp <= 0) morir(v, a);
+}
+function morir(v, a) {
+  v.alive = false; v.mesh.visible = false;
+  const ra = contarVivos() + 1;
+  const s = sueloEm(v.x, v.z, v.y);
+  if (v.esBot) { if (v.arma) crearItem('arma', v.x, s, v.z, v.arma); }
+  else v.slots.forEach((n, i) => { if (n) crearItem('arma', v.x + rnd(-1, 1), s, v.z + rnd(-1, 1), n); });
+  if (a && a !== v) a.elims++;
+  feed(`${a && a !== v ? a.nome : '🌪️ A tempestade'} eliminou ${v.nome}`);
+  if (v === eu) fin(false, ra, a);
+  else if (contarVivos() === 1 && eu.alive) fin(true, 1);
+  hud();
+}
+function fin(ganhou, rank, a) {
+  fimJogo = true;
+  document.exitPointerLock();
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('fimTit').textContent = ganhou ? '🏆 VITÓRIA!' : '💀 Você foi eliminado';
+  document.getElementById('fimTxt').textContent = ganhou
+    ? `Você é o último de pé! Eliminações: ${eu.elims}`
+    : `Posição #${rank} de ${ents.length}` + (a && a !== eu ? ` · eliminado por ${a.nome}` : ' · pela tempestade') + ` · Eliminações: ${eu.elims}`;
+  document.getElementById('fim').style.display = 'flex';
+}
+const FASES = [
+  { espera: 40, encolhe: 35, r: 55, dps: 1 }, { espera: 25, encolhe: 30, r: 32, dps: 2 },
+  { espera: 20, encolhe: 25, r: 16, dps: 4 }, { espera: 15, encolhe: 25, r: 7, dps: 6 },
+  { espera: 10, encolhe: 20, r: 1.5, dps: 9 }
+];
+const TM = { cx: 0, cz: 0, r: 95, tx: 0, tz: 0, tr: 55, fx: 0, fz: 0, fr: 95, f: 0, est: 'espera', t: FASES[0].espera, dps: 1 };
+function novoAlvo() {
+  const F = FASES[TM.f];
+  const ang = rnd(0, 6.283), off = Math.max(0, TM.r - F.r) * rnd(.2, .7);
+  TM.tx = TM.cx + Math.cos(ang) * off; TM.tz = TM.cz + Math.sin(ang) * off; TM.tr = F.r;
+  TM.dps = F.dps;
+}
+novoAlvo();
+const paredeTormenta = new THREE.Mesh(
+  new THREE.CylinderGeometry(1, 1, 90, 64, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0x8e3bff, transparent: true, opacity: .32, side: THREE.DoubleSide, depthWrite: false }));
+cena.add(paredeTormenta);
+function atualizarTormenta(dt) {
+  TM.t -= dt;
+  if (TM.est === 'espera') {
+    if (TM.t <= 0) { TM.est = 'encolhe'; TM.t = FASES[TM.f].encolhe; TM.fx = TM.cx; TM.fz = TM.cz; TM.fr = TM.r; }
+  } else {
+    const k = 1 - Math.max(0, TM.t) / FASES[TM.f].encolhe;
+    TM.cx = lerp(TM.fx, TM.tx, k); TM.cz = lerp(TM.fz, TM.tz, k); TM.r = lerp(TM.fr, TM.tr, k);
+    if (TM.t <= 0) {
+      if (TM.f < FASES.length - 1) { TM.f++; TM.est = 'espera'; TM.t = FASES[TM.f].espera; novoAlvo(); }
+      else { TM.est = 'fim'; TM.t = 1e9; }
+    }
+  }
+  paredeTormenta.position.set(TM.cx, 30, TM.cz);
+  paredeTormenta.scale.set(TM.r, 1, TM.r);
+  for (const e of ents) {
+    if (!e.alive || e.glide) continue;
+    if (Math.hypot(e.x - TM.cx, e.z - TM.cz) > TM.r) {
+      e.hp -= TM.dps * dt;
+      if (e === eu) { hud(); }
+      if (e.hp <= 0) morir(e, null);
+    }
+  }
+}
+
+// =====================================================
+// CONSTRUÇÃO
+// =====================================================
+function sobrepoe(l) {
+  for (const e of ents) {
+    if (!e.alive) continue;
+    if (e.x + R > l[0] - l[3] / 2 && e.x - R < l[0] + l[3] / 2 && e.z + R > l[2] - l[5] / 2 && e.z - R < l[2] + l[5] / 2 &&
+        e.y < l[1] + l[4] - .05 && e.y + 1.8 > l[1]) return true;
+  }
+  return false;
+}
+function construir(e, tipo) {
+  if (e.madeira < 10) { if (e === eu) aviso('Sem madeira! Colete com a picareta (1)'); return false; }
+  const fx = -Math.sin(e.yaw), fz = -Math.cos(e.yaw);
+  let dx = 0, dz = 0;
+  if (Math.abs(fx) > Math.abs(fz)) dx = Math.sign(fx); else dz = Math.sign(fz);
+  const pcx = Math.round(e.x / 4) * 4, pcz = Math.round(e.z / 4) * 4;
+  const y0 = e.y;
+  for (const extra of [0, 4]) {
+    let lista = [];
+    if (tipo === 'parede') {
+      let off = 2 + extra; if ((e.x - pcx) * dx + (e.z - pcz) * dz > 1.4) off += 4;
+      lista.push([pcx + dx * off, y0, pcz + dz * off, dx ? .3 : 4, 3, dx ? 4 : .3, 200]);
+    } else if (tipo === 'piso') {
+      const abajo = e.pitch < -.7 && extra === 0;
+      lista.push([abajo ? pcx : pcx + dx * (4 + extra), y0 - .3, abajo ? pcz : pcz + dz * (4 + extra), 4, .3, 4, 150]);
+    } else {
+      for (let i = 0; i < 4; i++)
+        lista.push([pcx + dx * (2 + extra + i + .5), y0 - .3, pcz + dz * (2 + extra + i + .5), dx ? 1 : 4, .3 + .75 * (i + 1), dx ? 4 : 1, 120]);
+    }
+    const chave = `${tipo}|${lista[0][0]}|${y0.toFixed(1)}|${lista[0][2]}`;
+    if (chavesPeca.has(chave)) return false;
+    if (lista.some(sobrepoe)) continue;
+    chavesPeca.add(chave);
+    lista.forEach((l, i) => {
+      const b = caja(l[0], l[1], l[2], l[3], l[4], l[5], 'pieza', tipo === 'rampa' ? 0xd2b074 : 0xc9a66b, l[6]);
+      if (i === 0) b.chave = chave;
+    });
+    e.madeira -= 10;
+    if (e === eu) hud();
+    return true;
+  }
+  return false;
+}
+
+// =====================================================
+// JOGADOR
+// =====================================================
+const teclas = {};
+let esq = false, mirando = false, fovAlvo = 70;
+function aviso(t, ms = 1800) {
+  const el = document.getElementById('aviso');
+  el.textContent = t; el.style.opacity = 1;
+  clearTimeout(aviso.t); aviso.t = setTimeout(() => el.style.opacity = 0, ms);
+}
+function feed(t) {
+  const d = document.createElement('div'); d.textContent = t;
+  const f = document.getElementById('feed'); f.appendChild(d);
+  setTimeout(() => d.remove(), 5500);
+  while (f.children.length > 6) f.firstChild.remove();
+}
+function flash() {
+  const el = document.getElementById('dano'); el.style.opacity = 1; setTimeout(() => el.style.opacity = 0, 180);
+}
+function marcador(cab) {
+  const h = document.getElementById('hit');
+  h.className = cab ? 'cab' : ''; h.style.opacity = 1; setTimeout(() => h.style.opacity = 0, 120);
+}
+const camPos = new THREE.Vector3(), dirCam = new THREE.Vector3();
+function atualizarJogador(dt) {
+  const e = eu;
+  e.yaw = yaw; e.pitch = pitch;
+  let fx = 0, fz = 0;
+  if (teclas.KeyW) fz -= 1; if (teclas.KeyS) fz += 1;
+  if (teclas.KeyA) fx -= 1; if (teclas.KeyD) fx += 1;
+  const len = Math.hypot(fx, fz) || 1; fx /= len; fz /= len;
+  const vel = e.glide ? 10 : (teclas.ShiftLeft ? 7.8 : 5.6) * (mirando ? .7 : 1);
+  const mx = (fx * Math.cos(yaw) + fz * Math.sin(yaw)) * vel;
+  const mz = (-fx * Math.sin(yaw) + fz * Math.cos(yaw)) * vel;
+  e.pique = !!teclas.Space;
+  mover(e, mx, mz, dt, teclas.Space);
+  e.cd -= dt;
+  if (!e.glide && esq && e.cd <= 0) {
+    if (e.cur === 0) { golpe(e); e.cd = .45; }
+    else {
+      const n = e.slots[e.cur - 1];
+      if (n) {
+        disparar(e, n, camPos.x, camPos.y, camPos.z, dirCam.x, dirCam.y, dirCam.z, mirando ? .4 : 1);
+        e.cd = ARMAS[n].cd;
+        pitch += n === 'sniper' ? .03 : n === 'rifle' ? .006 : n === 'escopeta' ? .02 : .01;
+      }
+    }
+  }
+  e.mesh.visible = true;
+  document.getElementById('planar').style.display = e.glide ? 'block' : 'none';
+}
+function golpe(e) {
+  const ox = e.x, oy = e.y + 1.6, oz = e.z;
+  let dx = dirCam.x, dy = dirCam.y, dz = dirCam.z;
+  for (const o of ents) {
+    if (o === e || !o.alive || o.glide) continue;
+    const r = rayEnt(ox, oy, oz, dx, dy, dz, o);
+    if (r.t < 2.6) { danar(o, 20, e); marcador(false); return; }
+  }
+  const rc = rayCajas(ox, oy, oz, dx, dy, dz, 4.5);
+  if (!rc.b) return;
+  const b = rc.b;
+  if (b.tipo === 'arbol') { b.hp -= 25; e.madeira += 12; }
+  else if (b.tipo === 'caixa') { b.hp -= 30; e.madeira += 20; }
+  else if (b.tipo === 'pieza') b.hp -= 60;
+  else return;
+  marcador(false); hud();
+  if (b.hp <= 0) quitar(b);
+}
+function pegarItens(e) {
+  for (const it of itens.slice()) {
+    if (Math.abs(it.x - e.x) > 1.6 || Math.abs(it.z - e.z) > 1.6 || Math.abs(it.y - e.y) > 2.2) continue;
+    if (it.tipo === 'madera') { e.madeira += 40; tirarItem(it); if (e === eu) { aviso('+40 madeira'); hud(); } }
+    else if (it.tipo === 'escudo') { if (e.escudo < 100) { e.escudo = Math.min(100, e.escudo + 50); tirarItem(it); if (e === eu) { aviso('+50 escudo'); hud(); } } }
+    else if (it.tipo === 'cura') { if (e.hp < 100) { e.hp = Math.min(100, e.hp + 30); tirarItem(it); if (e === eu) { aviso('+30 vida'); hud(); } } }
+    else if (it.tipo === 'arma') {
+      if (e.esBot) {
+        if (!e.arma || ARMAS[it.arma].nota > ARMAS[e.arma].nota) {
+          const velha = e.arma; e.arma = it.arma; tirarItem(it);
+          if (velha) crearItem('arma', e.x + 2, sueloEm(e.x + 2, e.z, e.y), e.z, velha);
+        }
+      } else {
+        const i = e.slots.indexOf(null);
+        if (i >= 0) { e.slots[i] = it.arma; if (e.cur === 0) e.cur = i + 1; tirarItem(it); aviso('Pegou: ' + ARMAS[it.arma].nome); hud(); }
+      }
+    }
+  }
+}
+function trocarArma() {
+  if (eu.cur === 0) { aviso('Selecione um slot de arma (2–5)'); return; }
+  for (const it of itens) {
+    if (it.tipo !== 'arma' || Math.abs(it.x - eu.x) > 2 || Math.abs(it.z - eu.z) > 2) continue;
+    const velha = eu.slots[eu.cur - 1];
+    eu.slots[eu.cur - 1] = it.arma; tirarItem(it);
+    if (velha) crearItem('arma', eu.x + 1.5, sueloEm(eu.x + 1.5, eu.z, eu.y), eu.z, velha);
+    hud(); return;
+  }
+}
+
+// =====================================================
+// BOTS
+// =====================================================
+function ladoLivre(b, o, d) {
+  const dx = o.x - b.x, dy = (o.y + 1) - (b.y + 1.5), dz = o.z - b.z;
+  const dist = Math.hypot(dx, dy, dz);
+  return rayCajas(b.x, b.y + 1.5, b.z, dx / dist, dy / dist, dz / dist, dist).t >= dist - .6;
+}
+function decidirBot(b) {
+  let mel = null, md = 50;
+  for (const o of ents) {
+    if (o === b || !o.alive || o.glide) continue;
+    const d = Math.hypot(o.x - b.x, o.z - b.z);
+    if (d < md && ladoLivre(b, o, d)) { md = d; mel = o; }
+  }
+  if (mel !== b.inimigo) { b.inimigo = mel; if (mel) b.reacao = rnd(.4, .9); }
+  b.fuga = Math.hypot(b.x - TM.cx, b.z - TM.cz) > TM.r - 4;
+  if (b.fuga) { b.dest = { x: TM.tx, z: TM.tz }; return; }
+  let melhor = null, mdi = b.arma ? 22 : 80;
+  for (const it of itens) {
+    if (!b.arma && it.tipo !== 'arma') continue;
+    if (it.tipo === 'escudo' && b.escudo >= 100) continue;
+    if (it.tipo === 'cura' && b.hp >= 100) continue;
+    if (it.tipo === 'arma' && b.arma && ARMAS[it.arma].nota <= ARMAS[b.arma].nota) continue;
+    const d = Math.hypot(it.x - b.x, it.z - b.z);
+    if (d < mdi) { mdi = d; melhor = it; }
+  }
+  if (melhor && (!b.inimigo || !b.arma)) { b.dest = { x: melhor.x, z: melhor.z }; return; }
+  if (!b.inimigo && (Math.hypot(b.dest.x - b.x, b.dest.z - b.z) < 2 || Math.random() < .08)) {
+    const a = rnd(0, 6.283), r = rnd(0, TM.tr * .7);
+    b.dest = { x: TM.tx + Math.cos(a) * r, z: TM.tz + Math.sin(a) * r };
+  }
+}
+function atualizarBot(b, dt) {
+  if (b.glide) {
+    const dx = b.dest.x - b.x, dz = b.dest.z - b.z, d = Math.hypot(dx, dz);
+    mover(b, d > 2 ? dx / d * 10 : 0, d > 2 ? dz / d * 10 : 0, dt, false);
+    b.yaw = Math.atan2(-dx, -dz);
+    return;
+  }
+  b.cd -= dt; b.tDec -= dt; b.tBuild -= dt;
+  if (b.tDec <= 0) { b.tDec = .3; decidirBot(b); }
+  let mx = 0, mz = 0, salto = false;
+  const spd = 5.3;
+  const e = b.inimigo;
+  if (e && e.alive && !e.glide && b.arma && !b.fuga) {
+    const dx = e.x - b.x, dz = e.z - b.z, d = Math.hypot(dx, dz) || 1;
+    const yawAlvo = Math.atan2(-dx, -dz);
+    b.yaw -= angDif(b.yaw, yawAlvo) * Math.min(1, dt * 9);
+    b.strafeT -= dt;
+    if (b.strafeT <= 0) { b.strafeT = rnd(.8, 1.8); b.strafeDir = Math.random() < .5 ? -1 : 1; }
+    const ideal = ARMAS[b.arma].ideal;
+    const f = d > ideal * 1.2 ? 1 : d < ideal * .6 ? -1 : 0;
+    mx = (dx / d * f + (-dz / d) * b.strafeDir * .7) * spd;
+    mz = (dz / d * f + (dx / d) * b.strafeDir * .7) * spd;
+    b.reacao -= dt;
+    if (b.cd <= 0 && b.reacao <= 0 && Math.abs(angDif(b.yaw, yawAlvo)) < .3 && d < ARMAS[b.arma].alcance * .7) {
+      const err = (.03 + d * .0022 + (Math.hypot(mx, mz) > 1 ? .02 : 0)) * 1.4;
+      let ax = dx + rnd(-1, 1) * err * d, ay = (e.y + 1.0) - (b.y + 1.5) + rnd(-1, 1) * err * d, az = dz + rnd(-1, 1) * err * d;
+      const n = Math.hypot(ax, ay, az);
+      disparar(b, b.arma, b.x, b.y + 1.5, b.z, ax / n, ay / n, az / n, 1);
+      b.cd = ARMAS[b.arma].cd * 1.25;
+    }
+    if (b.hp < 55 && b.madeira >= 10 && b.tBuild <= 0 && d > 6) { b.pitch = 0; construir(b, 'parede'); b.tBuild = 7; }
+  } else {
+    const dx = b.dest.x - b.x, dz = b.dest.z - b.z, d = Math.hypot(dx, dz);
+    if (d > 1.2) {
+      mx = dx / d * spd; mz = dz / d * spd;
+      b.yaw -= angDif(b.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 7);
+    }
+  }
+  // desvio de obstáculos
+  b.tStuck += dt;
+  if (b.tStuck > .6) {
+    const mov = Math.hypot(b.x - b.ultX, b.z - b.ultZ);
+    if (mov < .4 && Math.hypot(mx, mz) > 1) { b.desvio = .9; b.desvioDir = Math.random() < .5 ? -1 : 1; }
+    b.ultX = b.x; b.ultZ = b.z; b.tStuck = 0;
+  }
+  if (b.desvio > 0) {
+    b.desvio -= dt;
+    const l = Math.hypot(mx, mz) || 1;
+    mx += (-mz / l) * b.desvioDir * spd; mz += (mx / l) * b.desvioDir * spd;
+    salto = true;
+  }
+  mover(b, mx, mz, dt, salto);
+}
+
+// =====================================================
+// HUD
+// =====================================================
+const slotsEl = document.getElementById('slots');
+for (let i = 0; i < 5; i++) {
+  const d = document.createElement('div'); d.className = 'slot';
+  d.innerHTML = `<span class="k">${i + 1}</span><span class="t"></span>`;
+  d.onclick = () => { eu.cur = i; hud(); };
+  slotsEl.appendChild(d);
+}
+function hud() {
+  document.querySelector('#bVida div').style.width = clamp(eu.hp, 0, 100) + '%';
+  document.querySelector('#bEsc div').style.width = clamp(eu.escudo, 0, 100) + '%';
+  [...slotsEl.children].forEach((d, i) => {
+    d.classList.toggle('sel', i === eu.cur);
+    const n = i === 0 ? null : eu.slots[i - 1];
+    d.querySelector('.t').textContent = i === 0 ? '⛏ Picareta' : (n ? ARMAS[n].nome : '—');
+    d.style.borderColor = i === eu.cur ? '#fff' : (n ? '#' + ARMAS[n].cor.toString(16).padStart(6, '0') : '#555');
+  });
+  document.getElementById('placar').innerHTML = `👥 Vivos: ${contarVivos()}<br>🎯 Eliminações: ${eu.elims}`;
+  document.getElementById('mats').innerHTML = `🪵 Madeira: <b>${eu.madeira}</b><br><small>Q parede · E piso · R rampa</small>`;
+}
+function textoTormenta() {
+  const s = Math.max(0, Math.ceil(TM.t));
+  const el = document.getElementById('tempestade');
+  if (TM.est === 'espera') el.textContent = `🌪️ Tempestade fecha em ${s}s`;
+  else if (TM.est === 'encolhe') el.textContent = `🌪️ Tempestade fechando... ${s}s`;
+  else el.textContent = '🌪️ Zona final!';
+  document.getElementById('tormentaTela').style.opacity = Math.hypot(eu.x - TM.cx, eu.z - TM.cz) > TM.r ? 1 : 0;
+}
+const mini = document.getElementById('mini').getContext('2d');
+function desenharMini() {
+  const S = .9, C = 75;
+  mini.clearRect(0, 0, 150, 150);
+  mini.fillStyle = '#2f80c8'; mini.fillRect(0, 0, 150, 150);
+  mini.fillStyle = '#5a9a4a'; mini.beginPath(); mini.arc(C, C, 66 * S, 0, 6.283); mini.fill();
+  mini.fillStyle = '#8d8d8d';
+  casas.forEach(c => mini.fillRect(C + c.cx * S - 3, C + c.cz * S - 3, 6, 6));
+  mini.strokeStyle = '#fff'; mini.lineWidth = 1.5; mini.beginPath(); mini.arc(C + TM.tx * S, C + TM.tz * S, TM.tr * S, 0, 6.283); mini.stroke();
+  mini.strokeStyle = '#b05cff'; mini.lineWidth = 2; mini.beginPath(); mini.arc(C + TM.cx * S, C + TM.cz * S, TM.r * S, 0, 6.283); mini.stroke();
+  mini.save(); mini.translate(C + eu.x * S, C + eu.z * S); mini.rotate(-eu.yaw);
+  mini.fillStyle = '#ff7043'; mini.beginPath(); mini.moveTo(0, -6); mini.lineTo(4, 5); mini.lineTo(-4, 5); mini.fill();
+  mini.restore();
+}
+
+// =====================================================
+// CONTROLES
+// =====================================================
+let yaw = rnd(0, 6.28), pitch = -.25;
+const menu = document.getElementById('menu');
+function pedirLock() { if (!fimJogo) renderer.domElement.requestPointerLock(); }
+menu.addEventListener('click', pedirLock);
+renderer.domElement.addEventListener('click', pedirLock);
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) { menu.style.display = 'none'; ativoJogo = true; }
+  else { esq = false; mirando = false; for (const k in teclas) teclas[k] = false; if (!fimJogo) menu.style.display = 'flex'; }
+});
+document.addEventListener('mousemove', e => {
+  if (!document.pointerLockElement) return;
+  const s = mirando ? .0011 : .0022;
+  yaw -= e.movementX * s;
+  pitch = clamp(pitch - e.movementY * s, -1.3, 1.3);
+});
+addEventListener('keydown', e => {
+  teclas[e.code] = true;
+  if (!document.pointerLockElement || e.repeat) return;
+  const n = parseInt(e.key);
+  if (n >= 1 && n <= 5) { eu.cur = n - 1; hud(); }
+  if (e.code === 'KeyQ' && !eu.glide) construir(eu, 'parede');
+  if (e.code === 'KeyE' && !eu.glide) construir(eu, 'piso');
+  if (e.code === 'KeyR' && !eu.glide) construir(eu, 'rampa');
+  if (e.code === 'KeyG') trocarArma();
+});
+addEventListener('keyup', e => { teclas[e.code] = false; });
+addEventListener('wheel', e => { eu.cur = (eu.cur + (e.deltaY > 0 ? 1 : 4)) % 5; hud(); });
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('mousedown', e => {
+  if (!document.pointerLockElement) return;
+  if (e.button === 0) esq = true;
+  if (e.button === 2) { mirando = true; fovAlvo = 48; }
+});
+addEventListener('mouseup', e => {
+  if (e.button === 0) esq = false;
+  if (e.button === 2) { mirando = false; fovAlvo = 70; }
+});
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+});
+
+// =====================================================
+// LOOP
+// =====================================================
+function atualizarCamera() {
+  camera.rotation.set(pitch, yaw, 0);
+  dirCam.set(0, 0, -1).applyEuler(camera.rotation);
+  const hx = eu.x, hy = eu.y + 1.6, hz = eu.z;
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const dist = mirando ? 2.4 : 4.2, lado = mirando ? .6 : .9;
+  let tx = -dirCam.x * dist + rx * lado, ty = -dirCam.y * dist + .4, tz = -dirCam.z * dist + rz * lado;
+  const td = Math.hypot(tx, ty, tz);
+  const rc = rayCajas(hx, hy, hz, tx / td, ty / td, tz / td, td);
+  const k = rc.b ? Math.max(.4, rc.t - .3) / td : 1;
+  camPos.set(hx + tx * k, hy + ty * k, hz + tz * k);
+  camera.position.copy(camPos);
+  camera.fov = lerp(camera.fov, fovAlvo, .2); camera.updateProjectionMatrix();
+}
+let ultimo = performance.now(), tHud = 0;
+function loop(agora) {
+  const dt = Math.min((agora - ultimo) / 1000, .05);
+  ultimo = agora;
+  const ativo = ativoJogo && !!document.pointerLockElement && !fimJogo;
+  if (ativo) {
+    atualizarJogador(dt);
+    for (const b of ents) if (b.esBot && b.alive) atualizarBot(b, dt);
+    for (const e of ents) if (e.alive && !e.glide) pegarItens(e);
+    atualizarTormenta(dt);
+    tHud += dt;
+    if (tHud > .25) { tHud = 0; textoTormenta(); desenharMini(); hud(); }
+  }
+  for (const e of ents) {
+    if (!e.alive) continue;
+    e.mesh.position.set(e.x, e.y, e.z);
+    e.mesh.rotation.y = e.yaw;
+  }
+  for (const it of itens) { it.g.rotation.y += dt * 1.5; it.caixa.position.y = .8 + Math.sin(agora * .003 + it.fase) * .12; }
+  for (let i = tracers.length - 1; i >= 0; i--) {
+    tracers[i].v -= dt;
+    if (tracers[i].v <= 0) { cena.remove(tracers[i].l); tracers[i].l.geometry.dispose(); tracers.splice(i, 1); }
+  }
+  atualizarCamera();
+  renderer.render(cena, camera);
+  requestAnimationFrame(loop);
+}
+hud(); textoTormenta(); desenharMini();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
